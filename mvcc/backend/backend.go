@@ -48,6 +48,7 @@ var (
 	minSnapshotWarningTimeout = 30 * time.Second
 )
 
+//ReadTx和BatchTx对外提供了数据库的读写操作，而 Backend 就能对这两者提供的方法进行封装，为上层屏蔽存储的具体实现
 type Backend interface {
 	// ReadTx returns a read transaction. It is replaced by ConcurrentReadTx in the main data path, see #10523.
 	ReadTx() ReadTx
@@ -96,6 +97,7 @@ type backend struct {
 	openReadTxN int64
 
 	mu sync.RWMutex
+	//使用了bbolt
 	db *bolt.DB
 
 	batchInterval time.Duration
@@ -182,6 +184,7 @@ func newBackend(bcfg BackendConfig) *backend {
 		lg: bcfg.Logger,
 	}
 	b.batchTx = newBatchTxBuffered(b)
+	//开一个 goroutine 异步的对所有批量读写事务进行定时提交
 	go b.run()
 	return b
 }

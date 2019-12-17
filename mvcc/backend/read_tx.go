@@ -37,9 +37,15 @@ type ReadTx interface {
 	UnsafeForEach(bucketName []byte, visitor func(k, v []byte) error) error
 }
 
+//目前大多数的数据库对于只读类型的事务并没有那么多的限制，尤其是在使用了 MVCC 之后，所有的只读请求几乎不会被写请求锁住，
+//这大大提升了读的效率，由于在 BoltDB 的同一个 goroutine 中开启两个相互依赖的只读事务和读写事务会发生死锁，
+//为了避免这种情况我们还是引入了 sync.RWLock 保证死锁不会出现
+//一个只读事务来说，它对上层提供了两个获取存储引擎中数据的接口，分别是 UnsafeRange 和 UnsafeForEach
 type readTx struct {
 	// mu protects accesses to the txReadBuffer
+	// mu用来保护对txReadBuffer数据的操作
 	mu  sync.RWMutex
+	//buf 和结构体中的 buckets 都是用于加速读效率的缓存
 	buf txReadBuffer
 
 	// TODO: group and encapsulate {txMu, tx, buckets, txWg}, as they share the same lifecycle.
@@ -67,6 +73,7 @@ func (rt *readTx) UnsafeRange(bucketName, key, endKey []byte, limit int64) ([][]
 	if limit > 1 && !bytes.Equal(bucketName, safeRangeBucket) {
 		panic("do not use unsafeRange on non-keys bucket")
 	}
+	//先从自己持有的缓存 txReadBuffer 中读取数据
 	keys, vals := rt.buf.Range(bucketName, key, endKey, limit)
 	if int64(len(keys)) == limit {
 		return keys, vals
@@ -75,10 +82,12 @@ func (rt *readTx) UnsafeRange(bucketName, key, endKey []byte, limit int64) ([][]
 	// find/cache bucket
 	bn := string(bucketName)
 	rt.txMu.RLock()
+	//先从自己持有的缓存 bolt.Bucket 中读取数据
 	bucket, ok := rt.buckets[bn]
 	rt.txMu.RUnlock()
 	if !ok {
 		rt.txMu.Lock()
+		//从 BoltDB 数据库中读取
 		bucket = rt.tx.Bucket(bucketName)
 		rt.buckets[bn] = bucket
 		rt.txMu.Unlock()
@@ -92,6 +101,7 @@ func (rt *readTx) UnsafeRange(bucketName, key, endKey []byte, limit int64) ([][]
 	c := bucket.Cursor()
 	rt.txMu.Unlock()
 
+	//通过 BoltDB 中的游标来遍历满足查询条件的键值对
 	k2, v2 := unsafeRange(c, key, endKey, limit-int64(len(keys)))
 	return append(k2, keys...), append(v2, vals...)
 }
