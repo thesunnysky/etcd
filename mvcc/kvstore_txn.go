@@ -114,6 +114,7 @@ func (tw *storeTxnWrite) End() {
 	tw.s.mu.RUnlock()
 }
 
+//etcd 中所有的查询请求，无论是查询一个还是多个、是数量还是键值对
 func (tr *storeTxnRead) rangeKeys(key, end []byte, curRev int64, ro RangeOptions) (*RangeResult, error) {
 	rev := ro.Rev
 	if rev > curRev {
@@ -265,6 +266,7 @@ func (tw *storeTxnWrite) delete(key []byte) {
 	revToBytes(idxRev, ibytes)
 
 	if tw.storeTxnRead.s != nil && tw.storeTxnRead.s.lg != nil {
+		// 构造一个tombstone
 		ibytes = appendMarkTombstone(tw.storeTxnRead.s.lg, ibytes)
 	} else {
 		// TODO: remove this in v3.5
@@ -285,6 +287,7 @@ func (tw *storeTxnWrite) delete(key []byte) {
 		}
 	}
 
+	//删除操作对向 generation 追加一个新的 tombstone 标记
 	tw.tx.UnsafeSeqPut(keyBucketName, ibytes, d)
 	err = tw.s.kvindex.Tombstone(key, idxRev)
 	if err != nil {

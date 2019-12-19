@@ -357,6 +357,15 @@ func (s *store) Restore(b backend.Backend) error {
 	return s.restore()
 }
 
+//etcd启动时将数据从boltDB中加载到内存中
+//在恢复索引的过程中，有一个用于遍历不同键值的『生产者』循环，其中由 UnsafeRange 和 restoreChunk 两个方法构成，
+//这两个方法会从 BoltDB 中遍历数据，然后将键值对传到 rkvc 中，交给 restoreIntoIndex 方法中创建的 goroutine 处理：
+//在恢复索引的过程中，有一个用于遍历不同键值的『生产者』循环，其中由 UnsafeRange 和 restoreChunk 两个方法构成，
+//这两个方法会从 BoltDB 中遍历数据，然后将键值对传到 rkvc 中，交给 restoreIntoIndex 方法中创建的 goroutine 处理：
+
+//在恢复索引的过程中，有一个用于遍历不同键值的『生产者』循环，其中由 UnsafeRange 和 restoreChunk 两个方法构成，
+//这两个方法会从 BoltDB 中遍历数据，然后将键值对传到 rkvc 中，交给 restoreIntoIndex 方法中创建的 goroutine 处理：
+//Channel 作为整个恢复索引逻辑的一个消息中心，它将遍历 BoltDB 中的数据和恢复索引两部分代码进行了分离。
 func (s *store) restore() error {
 	s.setupMetricsReporter()
 
@@ -395,6 +404,8 @@ func (s *store) restore() error {
 	keysGauge.Set(0)
 	rkvc, revc := restoreIntoIndex(s.lg, s.kvindex)
 	for {
+		// tx := s.b.BatchTx()
+		// 每次从 "key" Bucket中读取 "restoreChunkKeys"byte的数据
 		keys, vals := tx.UnsafeRange(keyBucketName, min, max, int64(restoreChunkKeys))
 		if len(keys) == 0 {
 			break
@@ -424,6 +435,7 @@ func (s *store) restore() error {
 		scheduledCompact = 0
 	}
 
+	//更新store的中每个key的lease
 	for key, lid := range keyToLease {
 		if s.le == nil {
 			panic("no lessor to attach lease")
@@ -469,16 +481,23 @@ type revKeyValue struct {
 }
 
 func restoreIntoIndex(lg *zap.Logger, idx index) (chan<- revKeyValue, <-chan int64) {
+	//restoreChunkKeys = 10000
 	rkvc, revc := make(chan revKeyValue, restoreChunkKeys), make(chan int64, 1)
 	go func() {
 		currentRev := int64(1)
 		defer func() { revc <- currentRev }()
 		// restore the tree index from streaming the unordered index.
+		// Ques: kiCache好像就在这个方法内部使用了一下,用完了就没用了,kiCache的实际作用是什么
 		kiCache := make(map[string]*keyIndex, restoreChunkKeys)
+		// rkvc在该方法返回的时候作为chan<-形式返回,但是rkvc在定义的时候是双向的,这是因为要在本函数内读取chan中的内容
+		// 同时在函数的外部又有其他的goroutine向该chan中传入数据,
+		// 遍历rkvc chan
 		for rkv := range rkvc {
 			ki, ok := kiCache[rkv.kstr]
 			// purge kiCache if many keys but still missing in the cache
 			if !ok && len(kiCache) >= restoreChunkKeys {
+				// kiCache的容量为固定的10000, kiCache无法缓存的所有的key,如果kiCache满了的话就一次性剔除10个key
+				// 虽然map可以继续加容量,但是这里还是控制了kiCache的容量不能超过10000
 				i := 10
 				for k := range kiCache {
 					delete(kiCache, k)
@@ -490,18 +509,23 @@ func restoreIntoIndex(lg *zap.Logger, idx index) (chan<- revKeyValue, <-chan int
 			// cache miss, fetch from tree index if there
 			if !ok {
 				ki = &keyIndex{key: rkv.kv.Key}
+				// 如果kiCache中没有这个keyIndex,则尝试从tree index中获取key的keyIndex
+				// 因为kiCache的容量为固定的10000,所以kiCache中不能保证会缓存所有的key(上面会判断如果kiCache满了的话会剔除一部分(每次10个))
 				if idxKey := idx.KeyIndex(ki); idxKey != nil {
 					kiCache[rkv.kstr], ki = idxKey, idxKey
 					ok = true
 				}
 			}
 			rev := bytesToRev(rkv.key)
+			// 更新currentRev
 			currentRev = rev.main
 			if ok {
+				// restore的key中可能有的key是已经被删除的?
 				if isTombstone(rkv.key) {
 					ki.tombstone(lg, rev.main, rev.sub)
 					continue
 				}
+				//
 				ki.put(lg, rev.main, rev.sub)
 			} else if !isTombstone(rkv.key) {
 				ki.restore(lg, revision{rkv.kv.CreateRevision, 0}, rev, rkv.kv.Version)

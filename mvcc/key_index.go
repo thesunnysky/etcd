@@ -126,6 +126,7 @@ func (ki *keyIndex) restore(lg *zap.Logger, created, modified revision, ver int6
 // tombstone puts a revision, pointing to a tombstone, to the keyIndex.
 // It also creates a new empty generation in the keyIndex.
 // It returns ErrRevisionNotFound when tombstone on an empty generation.
+//向generations中追加一个墓碑版本(什么是墓碑版本?)
 func (ki *keyIndex) tombstone(lg *zap.Logger, main int64, sub int64) error {
 	if ki.isEmpty() {
 		if lg != nil {
@@ -359,9 +360,10 @@ func (ki *keyIndex) String() string {
 
 // generation contains multiple revisions of a key.
 type generation struct {
-	ver     int64
+	ver     int64    // 记录当前 generation 包含的修改次数
+	// created 记录创建 generation 时的 revision 版本
 	created revision // when the generation is created (put in first revision).
-	revs    []revision
+	revs    []revision //revs 用于存储所有的版本信息
 }
 
 func (g *generation) isEmpty() bool { return g == nil || len(g.revs) == 0 }
