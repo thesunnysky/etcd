@@ -25,6 +25,8 @@ import (
 	"go.uber.org/zap"
 )
 
+//读写事务同时提供了不带缓存的 batchTx 实现以及带缓存的 batchTxBuffered 实现，后者其实『继承了』前者的结构体，
+//并额外加入了缓存 txWriteBuffer 加速读请求
 type BatchTx interface {
 	ReadTx
 	UnsafeCreateBucket(name []byte)
@@ -37,6 +39,7 @@ type BatchTx interface {
 	CommitAndStop()
 }
 
+// 不带缓存的读写事务
 type batchTx struct {
 	sync.Mutex
 	tx      *bolt.Tx
@@ -111,6 +114,7 @@ func (t *batchTx) unsafePut(bucketName []byte, key []byte, value []byte, seq boo
 		// this can delay the page split and reduce space usage.
 		bucket.FillPercent = 0.9
 	}
+	// 目前只是写到boltDB中, 但是并没有提交, 还需要手动或者登台etcd自动将请求提交
 	if err := bucket.Put(key, value); err != nil {
 		if t.backend.lg != nil {
 			t.backend.lg.Fatal(
@@ -176,6 +180,7 @@ func (t *batchTx) UnsafeDelete(bucketName []byte, key []byte) {
 			plog.Fatalf("bucket %s does not exist", bucketName)
 		}
 	}
+	// 目前只是写到boltDB中, 但是并没有提交, 还需要手动或者登台etcd自动将请求提交
 	err := bucket.Delete(key)
 	if err != nil {
 		if t.backend.lg != nil {
@@ -261,6 +266,7 @@ type batchTxBuffered struct {
 	buf txWriteBuffer
 }
 
+// 带缓存的读写事务
 func newBatchTxBuffered(backend *backend) *batchTxBuffered {
 	tx := &batchTxBuffered{
 		batchTx: batchTx{backend: backend},

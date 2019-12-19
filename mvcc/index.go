@@ -39,6 +39,7 @@ type index interface {
 
 type treeIndex struct {
 	sync.RWMutex
+	// 这里使用的btree是google实现的一个版本, https://github.com/google/btree
 	tree *btree.BTree
 	lg   *zap.Logger
 }
@@ -65,6 +66,7 @@ func (ti *treeIndex) Put(key []byte, rev revision) {
 	okeyi.put(ti.lg, rev.main, rev.sub)
 }
 
+// 获取一个key的Revision信息
 func (ti *treeIndex) Get(key []byte, atRev int64) (modified, created revision, ver int64, err error) {
 	keyi := &keyIndex{key: key}
 	ti.RLock()

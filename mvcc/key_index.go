@@ -67,6 +67,8 @@ var (
 // compact(6):
 // generations:
 //    {empty} -> key SHOULD be removed.
+//每一个 keyIndex 结构体中都包含当前键的值以及最后一次修改对应的 revision 信息，其中还保存了一个 Key 的多个 generation，
+//每一个 generation 都会记录当前 Key『从生到死』的全部过程，每当一个 Key 被删除时都会调用 timestone 方法向当前的 generation 中追加一个新的墓碑版本
 type keyIndex struct {
 	key         []byte
 	modified    revision // the main rev of the last modification
