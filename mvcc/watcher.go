@@ -105,6 +105,8 @@ type watchStream struct {
 }
 
 // Watch creates a new watcher in the stream and returns its WatchID.
+//mvcc 模块对于向外界提供的监听某个 Key 和范围的接口，外部的其他模块会通过 watchStream.watch 函数与模块内部进行交互，
+//每一次调用 watch 方法最终都会向 watchableStore 持有的 watcherGroup 中添加新的 watcher 结构
 func (ws *watchStream) Watch(id WatchID, key, end []byte, startRev int64, fcs ...FilterFunc) (WatchID, error) {
 	// prevent wrong range where key >= end lexicographically
 	// watch request with 'WithFromKey' has empty-byte range end
@@ -125,9 +127,11 @@ func (ws *watchStream) Watch(id WatchID, key, end []byte, startRev int64, fcs ..
 		id = ws.nextID
 		ws.nextID++
 	} else if _, ok := ws.watchers[id]; ok {
+		// watch重复的Id
 		return -1, ErrWatcherDuplicateID
 	}
 
+	// 创建一个watcher, 并将其加入到watcherGroup中
 	w, c := ws.watchable.watch(key, end, startRev, id, ws.ch, fcs...)
 
 	ws.cancels[id] = c

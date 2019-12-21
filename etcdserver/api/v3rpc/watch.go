@@ -133,6 +133,8 @@ type serverWatchStream struct {
 	wg sync.WaitGroup
 }
 
+//当客户端想要通过 Watch 结果监听某一个 Key 或者一个范围的变动，在每一次客户端调用服务端上述方式都会创建两个 Goroutine，
+//这两个协程一个会负责向监听者发送数据变动的事件，另一个协程会负责处理客户端发来的事件。
 func (ws *watchServer) Watch(stream pb.Watch_WatchServer) (err error) {
 	sws := serverWatchStream{
 		lg: ws.lg,
@@ -159,6 +161,8 @@ func (ws *watchServer) Watch(stream pb.Watch_WatchServer) (err error) {
 	}
 
 	sws.wg.Add(1)
+	//对于每一个 Watch 请求来说，watchServer 会根据请求创建两个用于处理当前请求的 Goroutine，一个是sendLoop(), 另一个是:recvLoop()
+	//这两个协程会与更底层的 mvcc 模块协作提供监听和回调功能
 	go func() {
 		sws.sendLoop()
 		sws.wg.Done()
@@ -217,6 +221,7 @@ func (sws *serverWatchStream) isWatchPermitted(wcr *pb.WatchCreateRequest) bool 
 	return sws.ag.AuthStore().IsRangePermitted(authInfo, wcr.Key, wcr.RangeEnd) == nil
 }
 
+//当 etcd 服务启动时，会在服务端运行一个用于处理监听事件的 watchServer gRPC 服务，客户端的 Watch 请求最终都会被转发到这个服务的 Watch 函数中
 func (sws *serverWatchStream) recvLoop() error {
 	for {
 		req, err := sws.gRPCStream.Recv()
@@ -271,6 +276,8 @@ func (sws *serverWatchStream) recvLoop() error {
 			if rev == 0 {
 				rev = wsrev + 1
 			}
+			//在用于处理客户端的 recvLoop 方法中调用了 mvcc 模块暴露出的 watchStream.Watch 方法，该方法会返回一个可以用于取消监听事件的 watchID；
+			//当 gRPC 流已经结束后者出现错误时，当前的循环就会返回，两个 Goroutine 也都会结束。
 			id, err := sws.watchStream.Watch(mvcc.WatchID(creq.WatchId), creq.Key, creq.RangeEnd, rev, filters...)
 			if err == nil {
 				sws.mu.Lock()
@@ -333,6 +340,8 @@ func (sws *serverWatchStream) recvLoop() error {
 	}
 }
 
+//如果出现了更新或者删除事件，就会被发送到 watchStream 持有的 Channel 中，
+//而 sendLoop 会通过 select 来监听多个 Channel 中的数据并将接收到的数据封装成 pb.WatchResponse 结构并通过 gRPC 流发送给客户端
 func (sws *serverWatchStream) sendLoop() {
 	// watch ids that are currently active
 	ids := make(map[mvcc.WatchID]struct{})

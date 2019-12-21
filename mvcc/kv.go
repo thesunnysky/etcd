@@ -98,6 +98,7 @@ func (trw *txnReadWrite) Changes() []mvccpb.KeyValue { return nil }
 
 func NewReadOnlyTxnWrite(txn TxnRead) TxnWrite { return &txnReadWrite{txn} }
 
+
 type KV interface {
 	ReadView
 	WriteView

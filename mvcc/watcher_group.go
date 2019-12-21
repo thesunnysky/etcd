@@ -221,6 +221,8 @@ func (wg *watcherGroup) delete(wa *watcher) bool {
 }
 
 // choose selects watchers from the watcher group to update
+// 选出maxWatchers个需要update(watcher.minRev < compactRev)的watcher
+// 这里maxWatchers一直为512
 func (wg *watcherGroup) choose(maxWatchers int, curRev, compactRev int64) (*watcherGroup, int64) {
 	if len(wg.watchers) < maxWatchers {
 		return wg, wg.chooseAll(curRev, compactRev)

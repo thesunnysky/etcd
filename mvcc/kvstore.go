@@ -74,6 +74,9 @@ type StoreConfig struct {
 	CompactionBatchLimit int
 }
 
+//利用底层的 BoltDB 等基础设施为上层提供最常见的增伤改查，它组合了下层的 readTx、batchTx 等结构体，将一些线程不安全的操作变成线程安全的。
+//同时负责对内存中 btree 索引的维护以及压缩一些无用或者不常用的数据，
+//几个对外的接口 Read、Write 就是对 readTx、batchTx 等结构体的组合并将它们的接口暴露给其他的模块。
 type store struct {
 	ReadView
 	WriteView
