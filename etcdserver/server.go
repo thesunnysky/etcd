@@ -311,6 +311,7 @@ func NewServer(cfg ServerConfig) (srv *EtcdServer, err error) {
 		return nil, fmt.Errorf("cannot access data directory: %v", terr)
 	}
 
+	// 检查是否存在wal
 	haveWAL := wal.Exist(cfg.WALDir())
 
 	if err = fileutil.TouchDirAll(cfg.SnapDir()); err != nil {
