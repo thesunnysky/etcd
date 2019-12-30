@@ -153,6 +153,7 @@ func newBackend(bcfg BackendConfig) *backend {
 	bopts.InitialMmapSize = bcfg.mmapSize()
 	bopts.FreelistType = bcfg.BackendFreelistType
 
+	// 从data目录中读取历史数据
 	db, err := bolt.Open(bcfg.Path, 0600, bopts)
 	if err != nil {
 		if bcfg.Logger != nil {

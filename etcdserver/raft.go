@@ -159,6 +159,7 @@ func (r *raftNode) tick() {
 
 // start prepares and starts raftNode in a new goroutine. It is no longer safe
 // to modify the fields after it has been started.
+// 启动raftNode
 func (r *raftNode) start(rh *raftReadyHandler) {
 	internalTimeout := time.Second
 
@@ -218,6 +219,7 @@ func (r *raftNode) start(rh *raftReadyHandler) {
 				updateCommittedIndex(&ap, rh)
 
 				select {
+				// 将apply entry入chan到 applyc chan中
 				case r.applyc <- ap:
 				case <-r.stopped:
 					return

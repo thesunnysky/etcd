@@ -981,6 +981,9 @@ func (r *raft) Step(m pb.Message) error {
 		}
 
 	default:
+		// 对于不通角色的node,该方法会是不同的函数
+		// 如果当前node是leader,step=stepLeader()
+		// 如果当前node是follower,step=stepFollower()
 		err := r.step(r, m)
 		if err != nil {
 			return err
@@ -1076,6 +1079,7 @@ func stepLeader(r *raft, m pb.Message) error {
 		if !r.appendEntry(m.Entries...) {
 			return ErrProposalDropped
 		}
+		// 向flower append entries
 		r.bcastAppend()
 		return nil
 	case pb.MsgReadIndex:

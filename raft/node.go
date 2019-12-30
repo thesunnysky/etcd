@@ -242,12 +242,14 @@ func RestartNode(c *Config) Node {
 }
 
 type msgWithResult struct {
+	// protocol message
 	m      pb.Message
 	result chan error
 }
 
 // node is the canonical implementation of the Node interface
 type node struct {
+	// raftNode的messageResult chan, 用来处理有result对的message请求, raftNode会起一个goroutine来消费该chan
 	propc      chan msgWithResult
 	recvc      chan pb.Message
 	confc      chan pb.ConfChangeV2
@@ -293,6 +295,7 @@ func (n *node) Stop() {
 	<-n.done
 }
 
+// 启动raft node
 func (n *node) run() {
 	var propc chan msgWithResult
 	var readyc chan Ready
@@ -303,6 +306,7 @@ func (n *node) run() {
 
 	lead := None
 
+	// raft node的work loop
 	for {
 		if advancec != nil {
 			readyc = nil
@@ -338,9 +342,11 @@ func (n *node) run() {
 		// TODO: maybe buffer the config propose if there exists one (the way
 		// described in raft dissertation)
 		// Currently it is dropped in Step silently.
+		// 不停的从node.propc chan 中获取需要处理的propose message
 		case pm := <-propc:
 			m := pm.m
 			m.From = r.id
+			// 处理message
 			err := r.Step(m)
 			if pm.result != nil {
 				pm.result <- err
@@ -467,6 +473,7 @@ func (n *node) stepWithWaitOption(ctx context.Context, m pb.Message, wait bool) 
 		pm.result = make(chan error, 1)
 	}
 	select {
+	// 将propose message 放入到 node.propc chan中, 会在node.run() 中被消费
 	case ch <- pm:
 		if !wait {
 			return nil

@@ -208,6 +208,7 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 		CompactionBatchLimit:       cfg.ExperimentalCompactionBatchLimit,
 	}
 	print(e.cfg.logger, *cfg, srvcfg, memberInitialized)
+	// new etcd server
 	if e.Server, err = etcdserver.NewServer(srvcfg); err != nil {
 		return e, err
 	}
@@ -225,11 +226,13 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 			return e, err
 		}
 	}
+	//core
 	e.Server.Start()
 
 	if err = e.servePeers(); err != nil {
 		return e, err
 	}
+	//启动对
 	if err = e.serveClients(); err != nil {
 		return e, err
 	}
@@ -702,6 +705,7 @@ func configureClientListeners(cfg *Config) (sctxs map[string]*serveCtx, err erro
 	return sctxs, nil
 }
 
+// 启动goroutine serverClients
 func (e *Etcd) serveClients() (err error) {
 	if !e.cfg.ClientTLSInfo.Empty() {
 		if e.cfg.logger != nil {

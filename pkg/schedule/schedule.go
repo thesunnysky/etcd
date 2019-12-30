@@ -154,6 +154,7 @@ func (f *fifo) run() {
 				return
 			}
 		} else {
+			// 处理job
 			todo(f.ctx)
 			f.finishCond.L.Lock()
 			f.finished++

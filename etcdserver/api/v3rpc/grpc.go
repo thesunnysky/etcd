@@ -56,7 +56,9 @@ func Server(s *etcdserver.EtcdServer, tls *tls.Config, gopts ...grpc.ServerOptio
 	opts = append(opts, grpc.MaxConcurrentStreams(maxStreams))
 	grpcServer := grpc.NewServer(append(opts, gopts...)...)
 
+	//向grpc server中注册KV server, 用来处理对etcd的key的crud操作
 	pb.RegisterKVServer(grpcServer, NewQuotaKVServer(s))
+	//向grpc server中注册Watch server, 用来处理对etcd的watch请求
 	pb.RegisterWatchServer(grpcServer, NewWatchServer(s))
 	pb.RegisterLeaseServer(grpcServer, NewQuotaLeaseServer(s))
 	pb.RegisterClusterServer(grpcServer, NewClusterServer(s))

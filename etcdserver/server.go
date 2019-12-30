@@ -329,6 +329,7 @@ func NewServer(cfg ServerConfig) (srv *EtcdServer, err error) {
 
 	bepath := cfg.backendPath()
 	beExist := fileutil.Exist(bepath)
+	// core 创建一个backend
 	be := openBackend(cfg)
 
 	defer func() {
@@ -370,6 +371,7 @@ func NewServer(cfg ServerConfig) (srv *EtcdServer, err error) {
 		cl.SetID(types.ID(0), existingCluster.ID())
 		cl.SetStore(st)
 		cl.SetBackend(be)
+		//启动raft node
 		id, n, s, w = startNode(cfg, cl, nil)
 		cl.SetID(id, existingCluster.ID())
 
@@ -541,6 +543,8 @@ func NewServer(cfg ServerConfig) (srv *EtcdServer, err error) {
 			CheckpointInterval:         cfg.LeaseCheckpointInterval,
 			ExpiredLeasesRetryInterval: srv.Cfg.ReqTimeout(),
 		})
+
+	// new 一个watchable store
 	srv.kv = mvcc.New(srv.getLogger(), srv.be, srv.lessor, &srv.consistIndex, mvcc.StoreConfig{CompactionBatchLimit: cfg.CompactionBatchLimit})
 	if beExist {
 		kvindex := srv.kv.ConsistentIndex()
@@ -727,6 +731,7 @@ func (s *EtcdServer) adjustTicks() {
 // Start must be non-blocking; any long-running server functionality
 // should be implemented in goroutines.
 func (s *EtcdServer) Start() {
+	// core
 	s.start()
 	s.goAttach(func() { s.adjustTicks() })
 	s.goAttach(func() { s.publish(s.Cfg.ReqTimeout()) })
@@ -931,6 +936,7 @@ func (s *EtcdServer) run() {
 	}
 
 	// asynchronously accept apply packets, dispatch progress in-order
+	// 创建一个异步调度器
 	sched := schedule.NewFIFOScheduler()
 
 	var (
@@ -992,6 +998,7 @@ func (s *EtcdServer) run() {
 			}
 		},
 	}
+	// 启动raft node
 	s.r.start(rh)
 
 	ep := etcdProgress{
@@ -1047,6 +1054,7 @@ func (s *EtcdServer) run() {
 		select {
 		case ap := <-s.r.apply():
 			f := func(context.Context) { s.applyAll(&ep, &ap) }
+			// 异步调度etcd的apply行为
 			sched.Schedule(f)
 		case leases := <-expiredLeaseC:
 			s.goAttach(func() {
@@ -1205,6 +1213,7 @@ func (s *EtcdServer) applySnapshot(ep *etcdProgress, apply *apply) {
 		plog.Info("restoring mvcc store...")
 	}
 
+	//从backend中build新的index
 	if err := s.kv.Restore(newbe); err != nil {
 		if lg != nil {
 			lg.Panic("failed to restore mvcc store", zap.Error(err))
@@ -1377,6 +1386,7 @@ func (s *EtcdServer) applyEntries(ep *etcdProgress, apply *apply) {
 		return
 	}
 	var shouldstop bool
+	// 将entry写到kv store中
 	if ep.appliedt, ep.appliedi, shouldstop = s.apply(ents, &ep.confState); shouldstop {
 		go s.stopWithDelay(10*100*time.Millisecond, fmt.Errorf("the member has been permanently removed from the cluster"))
 	}
@@ -2211,6 +2221,9 @@ func (s *EtcdServer) applyEntryNormal(e *raftpb.Entry) {
 		if !needResult && raftReq.Txn != nil {
 			removeNeedlessRangeReqs(raftReq.Txn)
 		}
+		// core
+		// apply raft Request
+		// 比如说是etcd的put一个key,将会调用该方法将kv put到后端的store中
 		ar = s.applyV3.Apply(&raftReq)
 	}
 
@@ -2240,6 +2253,7 @@ func (s *EtcdServer) applyEntryNormal(e *raftpb.Entry) {
 			Action:   pb.AlarmRequest_ACTIVATE,
 			Alarm:    pb.AlarmType_NOSPACE,
 		}
+		// leader向flowers同步
 		s.raftRequest(s.ctx, pb.InternalRaftRequest{Alarm: a})
 		s.w.Trigger(id, ar)
 	})

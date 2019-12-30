@@ -3532,6 +3532,7 @@ type KVServer interface {
 	Compact(context.Context, *CompactionRequest) (*CompactionResponse, error)
 }
 
+// 向etcd中注册KV server, 用来处理对KV的相关操作
 func RegisterKVServer(s *grpc.Server, srv KVServer) {
 	s.RegisterService(&_KV_serviceDesc, srv)
 }
@@ -3554,12 +3555,15 @@ func _KV_Range_Handler(srv interface{}, ctx context.Context, dec func(interface{
 	return interceptor(ctx, in, info, handler)
 }
 
+// etcd KV的Put请求的handler
 func _KV_Put_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PutRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
+		// 向KVServer中Put()
+		// etcdserver/api/v3rpc/key.go Put()
 		return srv.(KVServer).Put(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
@@ -3567,6 +3571,7 @@ func _KV_Put_Handler(srv interface{}, ctx context.Context, dec func(interface{})
 		FullMethod: "/etcdserverpb.KV/Put",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		// etcdserver/api/v3rpc/key.go Put()
 		return srv.(KVServer).Put(ctx, req.(*PutRequest))
 	}
 	return interceptor(ctx, in, info, handler)

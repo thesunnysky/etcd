@@ -72,6 +72,7 @@ type watchableStore struct {
 // cancel operations.
 type cancelFunc func()
 
+// New一个watchabe store, 并启动这个watch的goroutine
 func New(lg *zap.Logger, b backend.Backend, le lease.Lessor, ig ConsistentIndexGetter, cfg StoreConfig) ConsistentWatchableKV {
 	return newWatchableStore(lg, b, le, ig, cfg)
 }
