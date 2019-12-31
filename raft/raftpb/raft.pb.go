@@ -313,6 +313,8 @@ func (m *Message) String() string            { return proto.CompactTextString(m)
 func (*Message) ProtoMessage()               {}
 func (*Message) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{3} }
 
+//需要在发送消息前持久化的消息，包含当前节点见过的最大的 term，
+//在这个 term 给谁投过票，已经当前节点知道的 commit index；
 type HardState struct {
 	Term             uint64 `protobuf:"varint,1,opt,name=term" json:"term"`
 	Vote             uint64 `protobuf:"varint,2,opt,name=vote" json:"vote"`

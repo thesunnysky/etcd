@@ -129,6 +129,7 @@ func (rn *RawNode) Ready() Ready {
 // readyWithoutAccept returns a Ready. This is a read-only operation, i.e. there
 // is no obligation that the Ready must be handled.
 func (rn *RawNode) readyWithoutAccept() Ready {
+	// 获取已经就绪的数据，也就是msgs []pb.Message中的数据，保存到了rd.Messages中
 	return newReady(rn.raft, rn.prevSoftSt, rn.prevHardSt)
 }
 

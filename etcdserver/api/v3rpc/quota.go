@@ -49,6 +49,8 @@ func (qa *quotaAlarmer) check(ctx context.Context, r interface{}) error {
 	return rpctypes.ErrGRPCNoSpace
 }
 
+// etcd的KV存储, 其对应了 NewQuotaKVServer() 中的实现，
+// 这里实际上是封装了一层，用来检查是否有足够的空间。
 func NewQuotaKVServer(s *etcdserver.EtcdServer) pb.KVServer {
 	return &quotaKVServer{
 		NewKVServer(s),
@@ -57,6 +59,7 @@ func NewQuotaKVServer(s *etcdserver.EtcdServer) pb.KVServer {
 }
 
 func (s *quotaKVServer) Put(ctx context.Context, r *pb.PutRequest) (*pb.PutResponse, error) {
+	//检查, check whether request satisfies the quota
 	if err := s.qa.check(ctx, r); err != nil {
 		return nil, err
 	}

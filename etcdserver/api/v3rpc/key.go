@@ -44,6 +44,7 @@ func NewKVServer(s *etcdserver.EtcdServer) pb.KVServer {
 	return &kvServer{hdr: newHeader(s), kv: s, maxTxnOps: s.Cfg.MaxTxnOps}
 }
 
+// 没有操作单个 key 的方法，即使是读取单个 key，也是需要使用 Range 方法
 func (s *kvServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeResponse, error) {
 	if err := checkRangeRequest(r); err != nil {
 		return nil, err
@@ -63,6 +64,7 @@ func (s *kvServer) Put(ctx context.Context, r *pb.PutRequest) (*pb.PutResponse, 
 		return nil, err
 	}
 
+	//etcdserver/v3_server.go 处理请求
 	resp, err := s.kv.Put(ctx, r)
 	if err != nil {
 		return nil, togRPCError(err)
@@ -124,6 +126,7 @@ func checkRangeRequest(r *pb.RangeRequest) error {
 	return nil
 }
 
+// 校验请求参数是否合法
 func checkPutRequest(r *pb.PutRequest) error {
 	if len(r.Key) == 0 {
 		return rpctypes.ErrGRPCEmptyKey

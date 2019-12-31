@@ -223,6 +223,8 @@ func (a *applierV3backend) Put(txn mvcc.TxnWrite, p *pb.PutRequest) (resp *pb.Pu
 		}
 	}
 
+	//写入到boltdb中
+	// storeTxnWrite
 	resp.Header.Revision = txn.Put(p.Key, val, leaseID)
 	trace.AddField(traceutil.Field{Key: "response_revision", Value: resp.Header.Revision})
 	return resp, trace, nil

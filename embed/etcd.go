@@ -229,10 +229,11 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 	//core
 	e.Server.Start()
 
+	// 启动集群内部通讯
 	if err = e.servePeers(); err != nil {
 		return e, err
 	}
-	//启动对
+	//启动协程处理客户请求
 	if err = e.serveClients(); err != nil {
 		return e, err
 	}
@@ -530,6 +531,7 @@ func configurePeerListeners(cfg *Config) (peers []*peerListener, err error) {
 
 // configure peer handlers after rafthttp.Transport started
 func (e *Etcd) servePeers() (err error) {
+	// 启动http服务
 	ph := etcdhttp.NewPeerHandler(e.GetLogger(), e.Server)
 	var peerTLScfg *tls.Config
 	if !e.cfg.PeerTLSInfo.Empty() {
@@ -540,6 +542,7 @@ func (e *Etcd) servePeers() (err error) {
 
 	for _, p := range e.Peers {
 		u := p.Listener.Addr().String()
+		// 启动gRPC服务
 		gs := v3rpc.Server(e.Server, peerTLScfg)
 		m := cmux.New(p.Listener)
 		go gs.Serve(m.Match(cmux.HTTP2()))

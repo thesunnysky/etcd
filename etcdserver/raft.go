@@ -172,6 +172,7 @@ func (r *raftNode) start(rh *raftReadyHandler) {
 			case <-r.ticker.C:
 				r.tick()
 			case rd := <-r.Ready():
+				// 阻塞等待readyc管道中的消息，包括上述提交的数据
 				if rd.SoftState != nil {
 					newLeader := rd.SoftState.Lead != raft.None && rh.getLead() != rd.SoftState.Lead
 					if newLeader {
@@ -210,6 +211,7 @@ func (r *raftNode) start(rh *raftReadyHandler) {
 				}
 
 				notifyc := make(chan struct{}, 1)
+				//构造apply对象，其中包括了已经提交的日志，SnapShot等
 				ap := apply{
 					entries:  rd.CommittedEntries,
 					snapshot: rd.Snapshot,
@@ -230,10 +232,12 @@ func (r *raftNode) start(rh *raftReadyHandler) {
 				// For more details, check raft thesis 10.2.1
 				if islead {
 					// gofail: var raftBeforeLeaderSend struct{}
+					// leader在将数据落盘的时候同时将数据，真正发送到对端
 					r.transport.Send(r.processMessages(rd.Messages))
 				}
 
 				// gofail: var raftBeforeSave struct{}
+				// 这里同时会对日志以及SnapShot进行持久化处理
 				if err := r.storage.Save(rd.HardState, rd.Entries); err != nil {
 					if r.lg != nil {
 						r.lg.Fatal("failed to save Raft hard state and entries", zap.Error(err))
@@ -272,6 +276,7 @@ func (r *raftNode) start(rh *raftReadyHandler) {
 
 				if !islead {
 					// finish processing incoming messages before we signal raftdone chan
+					// 会根据不同类型的消息进行一些异常的处理
 					msgs := r.processMessages(rd.Messages)
 
 					// now unblocks 'applyAll' that waits on Raft log disk writes before triggering snapshots
@@ -303,6 +308,7 @@ func (r *raftNode) start(rh *raftReadyHandler) {
 					}
 
 					// gofail: var raftBeforeFollowerSend struct{}
+					// rafthttp/transport.go 发送请求消息
 					r.transport.Send(msgs)
 				} else {
 					// leader already processed 'MsgSnap' and signaled
@@ -423,7 +429,7 @@ func (r *raftNode) advanceTicks(ticks int) {
 		r.tick()
 	}
 }
-
+// 新建一个节点，前提是没有WAL日志，且是新配置结点 etcdserver/raft.go
 func startNode(cfg ServerConfig, cl *membership.RaftCluster, ids []types.ID) (id types.ID, n raft.Node, s *raft.MemoryStorage, w *wal.WAL) {
 	var err error
 	member := cl.MemberByName(cfg.Name)
@@ -502,6 +508,7 @@ func restartNode(cfg ServerConfig, snapshot *raftpb.Snapshot) (types.ID, *member
 	if snapshot != nil {
 		walsnap.Index, walsnap.Term = snapshot.Metadata.Index, snapshot.Metadata.Term
 	}
+	// 读取WAL
 	w, id, cid, st, ents := readWAL(cfg.Logger, cfg.WALDir(), walsnap)
 
 	if cfg.Logger != nil {
@@ -545,6 +552,7 @@ func restartNode(cfg ServerConfig, snapshot *raftpb.Snapshot) (types.ID, *member
 		}
 	}
 
+	//raft/node.go 真正做重启节点的函数
 	n := raft.RestartNode(c)
 	raftStatusMu.Lock()
 	raftStatus = n.Status

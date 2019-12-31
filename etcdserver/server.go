@@ -472,6 +472,7 @@ func NewServer(cfg ServerConfig) (srv *EtcdServer, err error) {
 		}
 
 		if !cfg.ForceNewCluster {
+			// etcdserver/raft.go 已有WAL，直接根据SnapShot启动，最常见场景
 			id, cl, n, s, w = restartNode(cfg, snapshot)
 		} else {
 			id, cl, n, s, w = restartAsStandaloneNode(cfg, snapshot)
@@ -808,6 +809,7 @@ func (s *EtcdServer) start() {
 
 	// TODO: if this is an empty log, writes all peer infos
 	// into the first entry
+	// etcdserver/raft.go 启动应用层的处理协程
 	go s.run()
 }
 

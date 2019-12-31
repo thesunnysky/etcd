@@ -340,6 +340,8 @@ func (t *batchTxBuffered) UnsafePut(bucketName []byte, key []byte, value []byte)
 }
 
 func (t *batchTxBuffered) UnsafeSeqPut(bucketName []byte, key []byte, value []byte) {
+	//将kv写入到boltDB中
 	t.batchTx.UnsafeSeqPut(bucketName, key, value)
+	// 将kv存储到buf中
 	t.buf.putSeq(bucketName, key, value)
 }

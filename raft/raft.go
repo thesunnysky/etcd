@@ -373,6 +373,7 @@ func newRaft(c *Config) *raft {
 	if c.Applied > 0 {
 		raftlog.appliedTo(c.Applied)
 	}
+	// 这里会对关键对象初始化以及赋值，包括step=stepFollower r.tick=r.tickElection函数
 	r.becomeFollower(r.Term, None)
 
 	var nodesStrs []string
@@ -428,6 +429,7 @@ func (r *raft) send(m pb.Message) {
 			m.Term = r.Term
 		}
 	}
+	// 添加到msgs []pb.Message中，这里相当于一个发送的缓冲区添加到msgs []pb.Message中，这里相当于一个发送的缓冲区
 	r.msgs = append(r.msgs, m)
 }
 
@@ -456,6 +458,7 @@ func (r *raft) maybeSendAppend(to uint64, sendIfEmpty bool) bool {
 		return false
 	}
 
+	// 构造pb.MsgApp类型的消息结构体开始发送
 	if errt != nil || erre != nil { // send snapshot if we failed to get term or entries
 		if !pr.RecentActive {
 			r.logger.Debugf("ignore sending snapshot to %x since it is not recently active", to)
@@ -610,6 +613,7 @@ func (r *raft) reset(term uint64) {
 
 	r.electionElapsed = 0
 	r.heartbeatElapsed = 0
+	//更新选举的随机超时时间
 	r.resetRandomizedElectionTimeout()
 
 	r.abortLeaderTransfer()
@@ -633,6 +637,7 @@ func (r *raft) reset(term uint64) {
 }
 
 func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
+	// raft/log.go 日志最新的ID，并对每个消息赋值ID
 	li := r.raftLog.lastIndex()
 	for i := range es {
 		es[i].Term = r.Term
@@ -648,9 +653,12 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 		return false
 	}
 	// use latest "last" index after truncate/append
+	// 将新的entry加到unstable entry中
 	li = r.raftLog.append(es...)
+	// 这里更新了leader自己的Match
 	r.prs.Progress[r.id].MaybeUpdate(li)
 	// Regardless of maybeCommit's return, our caller will call bcastAppend.
+	// 只增加了自己的commit，未收到其它节点的返回消息，此时不会更新commit index
 	r.maybeCommit()
 	return true
 }
@@ -693,6 +701,7 @@ func (r *raft) tickHeartbeat() {
 
 func (r *raft) becomeFollower(term uint64, lead uint64) {
 	r.step = stepFollower
+	// 启动时设置term
 	r.reset(term)
 	r.tick = r.tickElection
 	r.lead = lead
@@ -829,6 +838,7 @@ func (r *raft) poll(id uint64, t pb.MessageType, v bool) (granted int, rejected 
 	return r.prs.TallyVotes()
 }
 
+// 处理raft的message
 func (r *raft) Step(m pb.Message) error {
 	// Handle the message term, which may result in our stepping down to a follower.
 	switch {
@@ -1076,10 +1086,12 @@ func stepLeader(r *raft, m pb.Message) error {
 			}
 		}
 
+		// 将日志添加到raftlog的unstable entry中，等待commit变成stable entry放到storage中，最终变成snapshot
 		if !r.appendEntry(m.Entries...) {
 			return ErrProposalDropped
 		}
 		// 向flower append entries
+		// 将entry广播到其它的节点，也就是日志复制
 		r.bcastAppend()
 		return nil
 	case pb.MsgReadIndex:
@@ -1141,6 +1153,7 @@ func stepLeader(r *raft, m pb.Message) error {
 			}
 		} else {
 			oldPaused := pr.IsPaused()
+			// 从其它节点获取到的响应消息，更新本地计数
 			if pr.MaybeUpdate(m.Index) {
 				switch {
 				case pr.State == tracker.StateProbe:
@@ -1162,6 +1175,7 @@ func stepLeader(r *raft, m pb.Message) error {
 				}
 
 				if r.maybeCommit() {
+					// 判断是否提交成功，如果更新成功则广播
 					r.bcastAppend()
 				} else if oldPaused {
 					// If we were paused before, this node may be missing the
@@ -1334,6 +1348,7 @@ func stepFollower(r *raft, m pb.Message) error {
 			return ErrProposalDropped
 		}
 		m.To = r.lead
+		// 直接添加到msgs []pb.Message数组中并转发给Leader
 		r.send(m)
 	case pb.MsgApp:
 		r.electionElapsed = 0

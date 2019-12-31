@@ -189,6 +189,7 @@ func (tw *storeTxnWrite) put(key, value []byte, leaseID lease.LeaseID) {
 	idxRev := revision{main: rev, sub: int64(len(tw.changes))}
 	revToBytes(idxRev, ibytes)
 
+	// version +1
 	ver = ver + 1
 	kv := mvccpb.KeyValue{
 		Key:            key,
@@ -212,7 +213,9 @@ func (tw *storeTxnWrite) put(key, value []byte, leaseID lease.LeaseID) {
 	}
 
 	tw.trace.Step("marshal mvccpb.KeyValue")
+	//batchTxBuffered.UnsafeSeqPut()
 	tw.tx.UnsafeSeqPut(keyBucketName, ibytes, d)
+	// 更新index
 	tw.s.kvindex.Put(key, idxRev)
 	tw.changes = append(tw.changes, kv)
 	tw.trace.Step("store kv pair into bolt db")

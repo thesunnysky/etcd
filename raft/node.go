@@ -49,6 +49,12 @@ func (a *SoftState) equal(b *SoftState) bool {
 // Ready encapsulates the entries and messages that are ready to read,
 // be saved to stable storage, committed or sent to other peers.
 // All fields in Ready are read-only.
+// 应用需要对 Ready 的处理包括:
+//1. 将 HardState、Entries、Snapshot 持久化到 storage；
+//2. 将 Messages 非阻塞的广播给其他 peers；
+//3. 将 CommittedEntries (已经提交但是还没有应用的日志) 应用到状态机；
+//4. 如果发现 CommittedEntries 中有成员变更类型的 entry，则调用 node 的 ApplyConfChange() 方法让 node 知道；
+//5. 调用 Node.Advance() 告诉 raft node 这批状态更新处理完，状态已经演进了，可以给我下一批 Ready 让我处理了。
 type Ready struct {
 	// The current volatile state of a Node.
 	// SoftState will be nil if there is no update.
@@ -71,17 +77,20 @@ type Ready struct {
 	Entries []pb.Entry
 
 	// Snapshot specifies the snapshot to be saved to stable storage.
+	// 需要持久化的快照
 	Snapshot pb.Snapshot
 
 	// CommittedEntries specifies entries to be committed to a
 	// store/state-machine. These have previously been committed to stable
 	// store.
+	// 已经提交但是还没有apply到状态机的日志, 这些log已经在store中被持久化了
 	CommittedEntries []pb.Entry
 
 	// Messages specifies outbound messages to be sent AFTER Entries are
 	// committed to stable storage.
 	// If it contains a MsgSnap message, the application MUST report back to raft
 	// when the snapshot has been received or has failed by calling ReportSnapshot.
+	//需要广播给所有 peers 的消息
 	Messages []pb.Message
 
 	// MustSync indicates whether the HardState and Entries must be synchronously
@@ -215,14 +224,17 @@ func StartNode(c *Config, peers []Peer) Node {
 	if len(peers) == 0 {
 		panic("no peers given; use RestartNode instead")
 	}
+	// 创建RAFT对象raft/raft.go
 	rn, err := NewRawNode(c)
 	if err != nil {
 		panic(err)
 	}
 	rn.Bootstrap(peers)
 
+	// 新建节点
 	n := newNode(rn)
 
+	//raft/node.go 节点运行，会启动一个协程运行
 	go n.run()
 	return &n
 }
@@ -323,6 +335,7 @@ func (n *node) run() {
 			readyc = n.readyc
 		}
 
+		//  如果leader已经变化，那么需要获取最新的propc管道
 		if lead != r.lead {
 			if r.hasLeader() {
 				if lead == None {
